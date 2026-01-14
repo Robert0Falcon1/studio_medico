@@ -52,18 +52,7 @@ pip install -r requirements.txt
 
 ### 4. Configura le variabili d'ambiente
 
-```powershell
-Copy-Item .env.example .env
-```
-
-Modifica `.env` e imposta una chiave segreta sicura per JWT:
-
-```env
-JWT_SECRET=inserisci_qui_una_chiave_lunga_e_casuale
-JWT_EXPIRE_MINUTES=60
-```
-
-⚠️ **Importante**: Non committare mai il file `.env` su Git (è già in `.gitignore`)
+Rinomina file `.env-example` in `.env` e imposta una chiave segreta sicura per JWT:
 
 ### 5. Inizializza il database
 
@@ -81,13 +70,13 @@ python -m backend.genera_db_ultimi_3_mesi
 
 Avvia backend e frontend in **due terminali separati**:
 
-### Terminal 1 - Backend API
+### Terminale 1 - Backend API
 
 ```powershell
 uvicorn backend.api_main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### Terminal 2 - Frontend Streamlit
+### Terminale 2 - Frontend Streamlit
 
 ```powershell
 streamlit run .\streamlit_app.py
@@ -130,7 +119,7 @@ Risposta attesa:
 ```powershell
 $login = curl.exe -s -X POST "http://127.0.0.1:8000/api/auth/login" `
   -H "Content-Type: application/x-www-form-urlencoded" `
-  -d "username=rob&password=Password123!"
+  -d "username=admin&password=Password123!"
 
 $token = (($login | ConvertFrom-Json).access_token).Trim()
 $token.Length
@@ -296,20 +285,24 @@ Se modifichi `JWT_SECRET` in `.env`, tutti i token precedentemente emessi divent
 ```
 studio_medico/
 ├── backend/
-│   ├── api_main.py              # FastAPI: auth JWT + endpoints
-│   ├── services.py              # Logica applicativa
-│   ├── models.py                # ORM SQLAlchemy
-│   ├── db.py                    # Engine + session
-│   ├── seed.py                  # Dati iniziali
+│   ├── __init__.py              
+│   ├── api_main.py                 # FastAPI: auth JWT + endpoints
+│   ├── auth_models.py              # Modelli autenticazione
+│   ├── auth_security.py            # Utility sicurezza JWT
+│   ├── auth_service.py             # Servizi autenticazione
+│   ├── cli.py                      # Comandi CLI
+│   ├── db.py                       # Engine + session
 │   ├── genera_db_ultimi_3_mesi.py  # Popolamento realistico
-│   ├── cli.py                   # Comandi CLI
-│   └── tools/                   # Utility (debug/migrazioni)
-├── progettazione/               # Diagrammi .puml
-├── streamlit_app.py             # Frontend Streamlit
-├── studio_medico.sqlite         # Database SQLite (generato)
-├── requirements.txt             # Dipendenze Python
-├── .env.example                 # Template configurazione
-└── README.md                    # Questa guida
+│   ├── models.py                   # ORM SQLAlchemy
+│   ├── seed.py                     # Dati iniziali
+│   └── services.py                 # Logica applicativa
+├── progettazione/                  # Diagrammi .puml e .bpmn
+├── streamlit_app.py                # Frontend Streamlit
+├── register.json                   # File temporaneo registrazione
+├── requirements.txt                # Dipendenze Python
+├── .env.example                    # Template configurazione
+├── .gitignore                      # File esclusi da Git
+└── README.md                       # Questa guida
 ```
 
 ---

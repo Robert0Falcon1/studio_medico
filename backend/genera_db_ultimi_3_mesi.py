@@ -25,9 +25,9 @@ from backend.models import (
 from backend.services import init_db
 
 
-# =========================
+
 # Config generazione
-# =========================
+
 RANDOM_SEED = 42
 
 PAZIENTI_COUNT = 140
@@ -220,7 +220,7 @@ def seed_pazienti() -> None:
 
 
 def _pick_tipo_visita(tipi: list[TipoVisita], medico: Medico) -> TipoVisita:
-    # Scelta “realistica” in base a specializzazione
+    # Scelta realistica in base a specializzazione
     name_to_weight = {}
     for tv in tipi:
         w = 1.0
@@ -276,10 +276,10 @@ def genera_appuntamenti_ultimi_90_giorni() -> None:
 
         base_occupancy = 0.62
 
-        # evita che lo stesso paziente veda lo stesso medico nello stesso giorno (con alta probabilità)
+        # evito che lo stesso paziente veda lo stesso medico nello stesso giorno
         seen_patient_day: set[tuple[str, str, date]] = set()
 
-        # evita collisioni del vincolo UNIQUE (sala_id, inizio)
+        # evito collisioni del vincolo UNIQUE (sala_id, inizio)
         used_sala_start: set[tuple[int, datetime]] = set()
 
         day = start_day
@@ -292,7 +292,7 @@ def genera_appuntamenti_ultimi_90_giorni() -> None:
 
             occupancy = min(0.92, max(0.25, base_occupancy * fattore + random.uniform(-0.08, 0.10)))
 
-            # timeline per sala (realismo: niente sovrapposizioni nella stessa sala)
+            # timeline per sala (senza sovrapposizioni nella stessa sala)
             timeline_by_sala: dict[int, list[Slot]] = {sala.id: [] for sala in sale}
 
             for medico in medici:
@@ -347,7 +347,7 @@ def genera_appuntamenti_ultimi_90_giorni() -> None:
 
                     sala = random.choice(sale)
 
-                    # no overlap per sala (realismo)
+                    # no overlap per sala
                     sala_tl = timeline_by_sala.setdefault(sala.id, [])
                     if any(sl.start < end_dt and sl.end > start_dt for sl in sala_tl):
                         continue

@@ -13,9 +13,9 @@ st.set_page_config(page_title="Studio Medico", layout="wide")
 API_BASE = os.getenv("API_BASE", "http://127.0.0.1:8000")
 
 
-# =========================
+
 # JWT helpers (solo per UI, senza verifica firma)
-# =========================
+
 def _b64url_decode(data: str) -> bytes:
     padding = "=" * (-len(data) % 4)
     return base64.urlsafe_b64decode(data + padding)
@@ -50,9 +50,9 @@ def jwt_username(token: str) -> str:
     return str(p.get("username") or p.get("sub") or "utente")
 
 
-# =========================
+
 # HTTP client (con JWT)
-# =========================
+
 def api_get(path: str, token: str | None = None, params: dict | None = None) -> dict | list:
     headers = {}
     if token:
@@ -115,9 +115,9 @@ def require_auth() -> str | None:
 
 
 
-# =========================
+
 # Sidebar login
-# =========================
+
 with st.sidebar:
     st.header("Accesso")
 
@@ -153,17 +153,17 @@ with st.sidebar:
     st.caption(f"API: {API_BASE}")
 
 
-# =========================
+
 # UI
-# =========================
+
 st.title("Sistema Studio Medico (API REST + JWT + Streamlit)")
 
 tab1, tab2, tab3, tab4 = st.tabs(["Prenotazioni", "Agenda Medico", "Pazienti", "Notifiche"])
 
 
-# =========================
+
 # Dati base (pubblici)
-# =========================
+
 @st.cache_data(ttl=10)
 def load_medici() -> list[dict]:
     return api_get("/api/medici")  # public
@@ -179,9 +179,9 @@ def load_tipi() -> list[dict]:
     return api_get("/api/tipi-visita")  # public
 
 
-# =========================
+
 # TAB 1 - Prenotazioni
-# =========================
+
 with tab1:
     st.subheader("Prenota appuntamento")
 
@@ -318,9 +318,9 @@ with tab1:
                     st.error(str(e))
 
 
-# =========================
+
 # TAB 2 - Agenda medico (PROTETTO)
-# =========================
+
 with tab2:
     st.subheader("Agenda giornaliera (sezione riservata)")
 
@@ -357,9 +357,9 @@ with tab2:
             st.error(f"Errore agenda: {e}")
 
 
-# =========================
+
 # TAB 3 - Pazienti (PROTETTO)
-# =========================
+
 with tab3:
     st.subheader("Gestione pazienti (sezione riservata)")
 
@@ -406,9 +406,9 @@ with tab3:
             st.error(f"Errore caricamento pazienti: {e}")
 
 
-# =========================
+
 # TAB 4 - Notifiche (PROTETTO)
-# =========================
+
 with tab4:
     st.subheader("Notifiche pendenti (sezione riservata)")
 

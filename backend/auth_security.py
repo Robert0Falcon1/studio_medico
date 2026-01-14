@@ -10,7 +10,7 @@ from passlib.context import CryptContext
 from dotenv import load_dotenv
 load_dotenv()
 
-# In produzione: mettila in variabile d'ambiente
+# Da mettere in .env in produzione: 
 JWT_SECRET = os.getenv("JWT_SECRET", "CHANGE_ME_DEV_SECRET")
 JWT_ALG = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "60"))

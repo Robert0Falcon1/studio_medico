@@ -13,7 +13,7 @@ DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 engine = create_engine(
     DATABASE_URL,
-    echo=False,              # metti True se vuoi vedere le query
+    echo=False,              # True se si vuole vedere le query
     future=True,
 )
 

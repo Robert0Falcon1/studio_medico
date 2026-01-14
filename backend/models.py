@@ -146,7 +146,7 @@ class AttrezzaturaSala(Base):
 class Appuntamento(Base):
     __tablename__ = "appuntamenti"
     __table_args__ = (
-        # Evita doppie prenotazioni identiche (stesso medico + stessa sala + stesso orario)
+        # Evito doppie prenotazioni identiche (stesso medico + stessa sala + stesso orario)
         UniqueConstraint("medico_id", "inizio", name="uq_app_medico_inizio"),
         UniqueConstraint("sala_id", "inizio", name="uq_app_sala_inizio"),
     )
@@ -201,7 +201,7 @@ class Notifica(Base):
     creata_il: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     inviata_il: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    # opzionale: notifica riferita a un appuntamento
+    # Notifica appuntamento
     appuntamento_id: Mapped[str | None] = mapped_column(ForeignKey("appuntamenti.id"), nullable=True)
 
     appuntamento: Mapped["Appuntamento"] = relationship(back_populates="notifiche")

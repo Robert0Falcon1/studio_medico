@@ -32,9 +32,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 app = FastAPI(title="Studio Medico API", version="1.0.0")
 
 
-# =========================
+
 # Startup
-# =========================
+
 @app.on_event("startup")
 def startup() -> None:
     # Crea tabelle (incluse Utente) e seed base (idempotente)
@@ -42,9 +42,9 @@ def startup() -> None:
     seed_base()
 
 
-# =========================
+
 # Schemi Auth
-# =========================
+
 class RegisterIn(BaseModel):
     username: str
     password: str
@@ -61,9 +61,9 @@ class MeOut(BaseModel):
     is_active: bool
 
 
-# =========================
+
 # Schemi Domain
-# =========================
+
 class PazienteCreateIn(BaseModel):
     nome: str
     cognome: str
@@ -98,9 +98,9 @@ class PrenotazionePubblicaIn(BaseModel):
     telefono: str | None = None
 
 
-# =========================
+
 # Dipendenze auth
-# =========================
+
 def get_current_user(token: str = Depends(oauth2_scheme)) -> Utente:
     # protezione extra: elimina spazi / virgolette accidentali
     token = token.strip().strip('"').strip("'")
@@ -115,9 +115,9 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> Utente:
     return u
 
 
-# =========================
+
 # AUTH endpoints
-# =========================
+
 @app.post("/api/auth/register", response_model=dict)
 def register(payload: RegisterIn) -> dict[str, Any]:
     try:
@@ -147,9 +147,9 @@ def protected_ping(user: Utente = Depends(get_current_user)) -> dict[str, Any]:
     return {"ok": True, "message": f"Ciao {user.username}, accesso autorizzato."}
 
 
-# =========================
+
 # PUBLIC endpoints (no JWT)
-# =========================
+
 @app.get("/api/medici")
 def api_medici() -> list[dict]:
     return lista_medici_flat()
@@ -198,9 +198,9 @@ def prenotazione_pubblica(payload: PrenotazionePubblicaIn) -> dict[str, Any]:
     }
 
 
-# =========================
+
 # PROTECTED endpoints (JWT)
-# =========================
+
 @app.get("/api/pazienti")
 def api_pazienti(user: Utente = Depends(get_current_user)) -> list[dict]:
     return lista_pazienti_flat()

@@ -130,7 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    init_db()  # garantisce tabelle
+    init_db()  # tabelle
     args.func(args)
 
 

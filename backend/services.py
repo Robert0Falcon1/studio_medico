@@ -21,17 +21,17 @@ from .models import (
 )
 
 
-# =========================
+
 # Bootstrap DB
-# =========================
+
 def init_db() -> None:
     """Crea le tabelle se non esistono."""
     Base.metadata.create_all(bind=engine)
 
 
-# =========================
+
 # Helper / DTO
-# =========================
+
 @dataclass(frozen=True)
 class EsitoPrenotazione:
     ok: bool
@@ -40,9 +40,9 @@ class EsitoPrenotazione:
     messaggio: str
 
 
-# =========================
+
 # CRUD base
-# =========================
+
 def crea_paziente(nome: str, cognome: str, email: str | None = None, telefono: str | None = None) -> str:
     with db_session() as s:
         p = Paziente(nome=nome.strip(), cognome=cognome.strip(), email=email, telefono=telefono)
@@ -59,9 +59,9 @@ def crea_medico(nome: str, cognome: str, specializzazione: str, email: str | Non
         return m.id
 
 
-# =========================
+
 # Query utili
-# =========================
+
 def lista_medici_attivi() -> list[Medico]:
     with db_session() as s:
         return list(s.scalars(select(Medico).where(Medico.attivo.is_(True)).order_by(Medico.cognome, Medico.nome)))
@@ -147,9 +147,9 @@ def agenda_giornaliera_flat(medico_id: str, giorno: date) -> list[dict]:
         ]
 
 
-# =========================
+
 # Disponibilità
-# =========================
+
 def _slot_libero(s, medico_id: str, sala_id: int, start: datetime, end: datetime) -> bool:
     """
     Regola semplice: nessuna sovrapposizione con appuntamenti non annullati.
@@ -172,9 +172,9 @@ def _slot_libero(s, medico_id: str, sala_id: int, start: datetime, end: datetime
     return s.execute(overlap).first() is None
 
 
-# =========================
+
 # Prenotazione (use case core)
-# =========================
+
 def prenota_appuntamento(
     paziente_id: str,
     medico_id: str,
@@ -328,13 +328,13 @@ def _promuovi_da_waitlist(s, medico_id: str, tipo_visita_id: int, start: datetim
         )
     )
 
-    # rimuove la richiesta dalla waitlist
+    # rimuove la richiesta dalla lista d'attesa
     s.delete(wl)
 
 
-# =========================
+
 # Notifiche (simulazione sistema esterno)
-# =========================
+
 def estrai_notifiche_pendenti(limit: int = 50) -> list[Notifica]:
     """Ritorna notifiche non ancora 'inviate' (inviata_il è NULL)."""
     with db_session() as s:
@@ -404,9 +404,9 @@ def marca_notifica_inviata(notifica_id: int) -> bool:
         return True
 
 
-# =========================
+
 # Lookup "flat" (safe per Streamlit/API)
-# =========================
+
 def lista_medici_flat() -> list[dict]:
     with db_session() as s:
         rows = s.execute(
