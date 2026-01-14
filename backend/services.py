@@ -349,13 +349,27 @@ def lista_medici_flat() -> list[dict]:
 
 
 def lista_pazienti_flat() -> list[dict]:
+    """Lista pazienti in formato serializzabile (safe per Streamlit), includendo telefono."""
     with db_session() as s:
         rows = s.execute(
-            select(Paziente.id, Paziente.nome, Paziente.cognome, Paziente.email)
+            select(
+                Paziente.id,
+                Paziente.nome,
+                Paziente.cognome,
+                Paziente.email,
+                Paziente.telefono,
+            )
             .order_by(Paziente.cognome, Paziente.nome)
         ).all()
+
         return [
-            {"id": r.id, "nome": r.nome, "cognome": r.cognome, "email": r.email}
+            {
+                "id": r.id,
+                "nome": r.nome,
+                "cognome": r.cognome,
+                "email": r.email,
+                "telefono": r.telefono,
+            }
             for r in rows
         ]
 
