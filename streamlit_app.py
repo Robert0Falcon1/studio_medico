@@ -421,7 +421,18 @@ with tab4:
             else:
                 for n in pendenti:
                     paz = n.get("paziente") or "-"
-                    st.write(f"[{n['id']}] **{n['tipo']}** | {n['creata_il']} | Paziente: **{paz}** | {n['messaggio']}")
+
+                    msg = (n.get("messaggio") or "").strip()
+
+                    prefix = "Appuntamento confermato per "
+                    if msg.startswith(prefix):
+                        tail = msg[len(prefix):].strip().rstrip(".")  # es: "13/01/2026 16:00"
+                        parts = tail.split()
+                        if len(parts) >= 2:
+                            d, t = parts[0], parts[1]
+                            msg = f"Appuntamento confermato per il {d} h {t}."
+
+                    st.write(f"[{n['id']}] **{n['tipo']}** | Paziente: **{paz}** - {msg}")
 
         except PermissionError as e:
             st.session_state["auth_error"] = str(e)
