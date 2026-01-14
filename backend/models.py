@@ -42,10 +42,27 @@ class Medico(Base):
 
     appuntamenti: Mapped[list["Appuntamento"]] = relationship(back_populates="medico", cascade="all, delete-orphan")
     waitlist: Mapped[list["ListaAttesa"]] = relationship(back_populates="medico", cascade="all, delete-orphan")
+    disponibilita: Mapped[list["DisponibilitaMedico"]] = relationship(back_populates="medico", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"Medico({self.nome} {self.cognome}, {self.specializzazione})"
 
+class DisponibilitaMedico(Base):
+    """
+    Orari di disponibilità settimanali del medico.
+    - giorno_settimana: 0=Lunedì ... 6=Domenica
+    - ora_inizio/ora_fine in formato "HH:MM" per semplicità
+    """
+    __tablename__ = "disponibilita_medici"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    medico_id: Mapped[str] = mapped_column(ForeignKey("medici.id"), nullable=False)
+
+    giorno_settimana: Mapped[int] = mapped_column(Integer, nullable=False)  # 0..6
+    ora_inizio: Mapped[str] = mapped_column(String(5), nullable=False)      # "09:00"
+    ora_fine: Mapped[str] = mapped_column(String(5), nullable=False)        # "13:00"
+
+    medico: Mapped["Medico"] = relationship(back_populates="disponibilita")
 
 class Paziente(Base):
     __tablename__ = "pazienti"
