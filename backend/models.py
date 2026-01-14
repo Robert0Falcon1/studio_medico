@@ -205,3 +205,11 @@ class Notifica(Base):
     appuntamento_id: Mapped[str | None] = mapped_column(ForeignKey("appuntamenti.id"), nullable=True)
 
     appuntamento: Mapped["Appuntamento"] = relationship(back_populates="notifiche")
+
+    paziente_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("pazienti.id"),
+        nullable=True,
+    )
+
+    paziente = relationship("Paziente")

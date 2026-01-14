@@ -13,10 +13,13 @@ from backend.models import (
     CartellaClinica,
     ContattoEmergenza,
     DisponibilitaMedico,
+    ListaAttesa,
     Medico,
+    Notifica,
     Paziente,
     SalaVisita,
     StatoAppuntamento,
+    TipoNotifica,
     TipoVisita,
 )
 from backend.services import init_db
@@ -53,7 +56,6 @@ SALE = [
 ]
 
 # Distribuzione affluenza per giorno della settimana (0=lun...6=dom)
-# Valori più alti -> più appuntamenti
 AFFLUENZA_FATTORE = {
     0: 1.15,  # lun
     1: 1.05,  # mar
@@ -83,7 +85,7 @@ def _random_phone() -> str:
 
 def _random_email(nome: str, cognome: str) -> str:
     domains = ["mail.it", "gmail.com", "outlook.com", "icloud.com"]
-    return f"{nome.lower()}.{cognome.lower()}{random.randint(1, 99)}@{random.choice(domains)}"
+    return f"{nome.lower()}.{cognome.lower()}{random.randint(1, 9999)}@{random.choice(domains)}"
 
 
 def _make_slots_for_day(day: date, start_hm: str, end_hm: str, step_minutes: int = 5) -> list[datetime]:
@@ -104,7 +106,10 @@ def _make_slots_for_day(day: date, start_hm: str, end_hm: str, step_minutes: int
 def reset_db() -> None:
     """Cancella i dati principali (mantiene lo schema)."""
     with db_session() as s:
-        # Ordine importante per vincoli FK
+        # Ordine importante per vincoli FK / coerenza
+        s.execute(delete(Notifica))
+        s.execute(delete(ListaAttesa))
+
         s.execute(delete(Appuntamento))
         s.execute(delete(DisponibilitaMedico))
         s.execute(delete(AttrezzaturaSala))
@@ -242,17 +247,14 @@ def _stato_per_data(app_date: date) -> StatoAppuntamento:
     delta = (today - app_date).days
 
     if delta >= 2:
-        # appuntamenti passati: quasi tutti completati, alcuni annullati
         return StatoAppuntamento.COMPLETATO if random.random() < 0.92 else StatoAppuntamento.ANNULLATO
     if delta in {0, 1}:
-        # oggi / ieri: mix
         r = random.random()
         if r < 0.65:
             return StatoAppuntamento.COMPLETATO
         if r < 0.85:
             return StatoAppuntamento.CONFERMATO
         return StatoAppuntamento.ANNULLATO
-    # (in teoria non dovremmo avere futuro, ma per sicurezza)
     return StatoAppuntamento.CONFERMATO
 
 
@@ -267,13 +269,18 @@ def genera_appuntamenti_ultimi_90_giorni() -> None:
         tipi = list(s.scalars(select(TipoVisita)).all())
 
         if not medici or not pazienti or not sale or not tipi:
-            raise RuntimeError("Mancano dati base (medici/pazienti/sale/tipi visita). Esegui seed_struttura + seed_pazienti.")
+            raise RuntimeError(
+                "Mancano dati base (medici/pazienti/sale/tipi visita). "
+                "Esegui seed_struttura + seed_pazienti."
+            )
 
-        # Indicatore occupazione media (regolabile)
         base_occupancy = 0.62
 
-        # set per evitare doppioni paziente nello stesso giorno con lo stesso medico (realismo)
+        # evita che lo stesso paziente veda lo stesso medico nello stesso giorno (con alta probabilità)
         seen_patient_day: set[tuple[str, str, date]] = set()
+
+        # evita collisioni del vincolo UNIQUE (sala_id, inizio)
+        used_sala_start: set[tuple[int, datetime]] = set()
 
         day = start_day
         while day <= end_day:
@@ -283,11 +290,12 @@ def genera_appuntamenti_ultimi_90_giorni() -> None:
                 day += timedelta(days=1)
                 continue
 
-            # variazione casuale giorno per giorno
             occupancy = min(0.92, max(0.25, base_occupancy * fattore + random.uniform(-0.08, 0.10)))
 
+            # timeline per sala (realismo: niente sovrapposizioni nella stessa sala)
+            timeline_by_sala: dict[int, list[Slot]] = {sala.id: [] for sala in sale}
+
             for medico in medici:
-                # disponibilità del medico per quel giorno
                 disps = s.execute(
                     select(DisponibilitaMedico).where(
                         DisponibilitaMedico.medico_id == medico.id,
@@ -298,21 +306,18 @@ def genera_appuntamenti_ultimi_90_giorni() -> None:
                 if not disps:
                     continue
 
-                # costruiamo una lista di start possibili ogni 5 minuti (poi filtreremo per durata)
                 possible_starts: list[datetime] = []
                 for d in disps:
                     possible_starts.extend(_make_slots_for_day(day, d.ora_inizio, d.ora_fine, step_minutes=5))
 
                 random.shuffle(possible_starts)
 
-                # target appuntamenti per quel medico/giorno (realistico: 6-18)
-                # dipende dalla presenza del sabato e specializzazione
                 cap_base = 14 if dow < 5 else 7
                 cap = int(cap_base * fattore + random.randint(-2, 2))
                 cap = max(3, min(cap, 20))
 
                 created = 0
-                timeline: list[Slot] = []  # per evitare sovrapposizioni del medico (semplificazione)
+                timeline_medico: list[Slot] = []
 
                 for start_dt in possible_starts:
                     if created >= cap:
@@ -323,8 +328,6 @@ def genera_appuntamenti_ultimi_90_giorni() -> None:
                     tv = _pick_tipo_visita(tipi, medico)
                     end_dt = start_dt + timedelta(minutes=tv.durata_minuti)
 
-                    # rientro nella fascia?
-                    # (assumo che possible_starts sia dentro, ma fine può sforare)
                     ok_window = any(
                         datetime.combine(day, time(*map(int, d.ora_inizio.split(":")))) <= start_dt
                         and end_dt <= datetime.combine(day, time(*map(int, d.ora_fine.split(":"))))
@@ -333,8 +336,8 @@ def genera_appuntamenti_ultimi_90_giorni() -> None:
                     if not ok_window:
                         continue
 
-                    # no overlap con altri slot del medico
-                    if any(sl.start < end_dt and sl.end > start_dt for sl in timeline):
+                    # no overlap per medico
+                    if any(sl.start < end_dt and sl.end > start_dt for sl in timeline_medico):
                         continue
 
                     paziente = random.choice(pazienti)
@@ -343,6 +346,17 @@ def genera_appuntamenti_ultimi_90_giorni() -> None:
                         continue
 
                     sala = random.choice(sale)
+
+                    # no overlap per sala (realismo)
+                    sala_tl = timeline_by_sala.setdefault(sala.id, [])
+                    if any(sl.start < end_dt and sl.end > start_dt for sl in sala_tl):
+                        continue
+
+                    # vincolo UNIQUE (sala_id, inizio)
+                    start_key = (sala.id, start_dt.replace(second=0, microsecond=0))
+                    if start_key in used_sala_start:
+                        continue
+                    used_sala_start.add(start_key)
 
                     stato = _stato_per_data(day)
 
@@ -366,11 +380,51 @@ def genera_appuntamenti_ultimi_90_giorni() -> None:
                     )
                     s.add(app)
 
-                    timeline.append(Slot(start=start_dt, end=end_dt))
+                    timeline_medico.append(Slot(start=start_dt, end=end_dt))
+                    sala_tl.append(Slot(start=start_dt, end=end_dt))
                     seen_patient_day.add(key)
                     created += 1
 
             day += timedelta(days=1)
+
+
+def seed_notifiche_pendenti_demo() -> None:
+    """
+    Crea un set di notifiche pendenti (non inviate) per appuntamenti recenti,
+    così la UI 'Notifiche' non risulta sempre vuota.
+    """
+    cutoff = datetime.combine(date.today() - timedelta(days=2), time.min)
+
+    with db_session() as s:
+        apps = s.execute(
+            select(Appuntamento).where(Appuntamento.inizio >= cutoff)
+        ).scalars().all()
+
+        # per evitare di creare migliaia di notifiche pendenti
+        random.shuffle(apps)
+        apps = apps[:120]
+
+        for app in apps:
+            if app.stato == StatoAppuntamento.CONFERMATO:
+                s.add(
+                    Notifica(
+                        tipo=TipoNotifica.CONFERMA,
+                        messaggio=f"Appuntamento confermato per {app.inizio.strftime('%d/%m/%Y %H:%M')}.",
+                        appuntamento_id=app.id,
+                        paziente_id=app.paziente_id,
+                        inviata_il=None,
+                    )
+                )
+            elif app.stato == StatoAppuntamento.ANNULLATO:
+                s.add(
+                    Notifica(
+                        tipo=TipoNotifica.ANNULLAMENTO,
+                        messaggio=f"Appuntamento annullato per {app.inizio.strftime('%d/%m/%Y %H:%M')}.",
+                        appuntamento_id=app.id,
+                        paziente_id=app.paziente_id,
+                        inviata_il=None,
+                    )
+                )
 
 
 def main(reset: bool = True) -> None:
@@ -384,10 +438,10 @@ def main(reset: bool = True) -> None:
     seed_struttura()
     seed_pazienti()
     genera_appuntamenti_ultimi_90_giorni()
+    seed_notifiche_pendenti_demo()
 
     print("OK: database popolato con dati realistici degli ultimi 90 giorni.")
 
 
 if __name__ == "__main__":
-    # default: reset True
     main(reset=True)

@@ -24,3 +24,9 @@ I file `.puml` contengono alcuni placeholder (`...`), quindi l’implementazione
 
 ```powershell
 pip install -r requirements.txt
+
+python -m backend.tools.migrate_add_notifiche_paziente_id
+
+uvicorn backend.api_main:app --reload --reload-dir backend --host 127.0.0.1 --port 
+
+streamlit run .\streamlit_app.py

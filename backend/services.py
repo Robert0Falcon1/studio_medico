@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
-from typing import Iterable
+from typing import Any
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, select, func
+from sqlalchemy.sql import func
 
 from .db import Base, db_session, engine
 from .models import (
@@ -100,9 +101,10 @@ def agenda_giornaliera(medico_id: str, giorno: date) -> list[Appuntamento]:
         )
         return list(s.scalars(q))
 
+
 def agenda_giornaliera_flat(medico_id: str, giorno: date) -> list[dict]:
     """
-    Versione 'flat' (safe per Streamlit): ritorna dict serializzabili.
+    Versione 'flat' (safe per Streamlit/API): ritorna dict serializzabili.
     Evita lazy-load e DetachedInstanceError.
     """
     start_day = datetime.combine(giorno, datetime.min.time())
@@ -143,7 +145,8 @@ def agenda_giornaliera_flat(medico_id: str, giorno: date) -> list[dict]:
             }
             for r in rows
         ]
-        
+
+
 # =========================
 # Disponibilità
 # =========================
@@ -187,6 +190,9 @@ def prenota_appuntamento(
     - Verifica disponibilità medico+sala
     - Se pieno: opzionale inserimento in lista d'attesa
     - Genera notifiche (conferma o waitlist)
+
+    NOTE: Per visualizzare nome/cognome del paziente nelle notifiche,
+    Notifica deve avere una colonna `paziente_id` (nullable).
     """
     with db_session() as s:
         tv = s.get(TipoVisita, tipo_visita_id)
@@ -208,11 +214,13 @@ def prenota_appuntamento(
             )
             s.add(wl)
 
+            # Notifica con riferimento al paziente (se la colonna esiste nel model/DB)
             s.add(
                 Notifica(
                     tipo=TipoNotifica.PROMEMORIA,
                     messaggio="Sei stato inserito in lista d'attesa: ti avviseremo quando si libera uno slot.",
                     appuntamento_id=None,
+                    paziente_id=paziente_id,
                 )
             )
             return EsitoPrenotazione(True, None, True, "Slot pieno: paziente inserito in lista d'attesa.")
@@ -235,6 +243,7 @@ def prenota_appuntamento(
                 tipo=TipoNotifica.CONFERMA,
                 messaggio=f"Appuntamento confermato per {start.strftime('%d/%m/%Y %H:%M')}.",
                 appuntamento_id=app.id,
+                paziente_id=paziente_id,
             )
         )
 
@@ -260,10 +269,17 @@ def annulla_appuntamento(appuntamento_id: str, motivo: str | None = None) -> boo
                 tipo=TipoNotifica.ANNULLAMENTO,
                 messaggio=f"Appuntamento annullato. Motivo: {motivo or 'n/d'}",
                 appuntamento_id=app.id,
+                paziente_id=app.paziente_id,
             )
         )
 
-        _promuovi_da_waitlist(s, medico_id=app.medico_id, tipo_visita_id=app.tipo_visita_id, start=app.inizio, sala_id=app.sala_id)
+        _promuovi_da_waitlist(
+            s,
+            medico_id=app.medico_id,
+            tipo_visita_id=app.tipo_visita_id,
+            start=app.inizio,
+            sala_id=app.sala_id,
+        )
         return True
 
 
@@ -308,6 +324,7 @@ def _promuovi_da_waitlist(s, medico_id: str, tipo_visita_id: int, start: datetim
             tipo=TipoNotifica.WAITLIST_PROMOSSA,
             messaggio=f"Si è liberato uno slot: appuntamento assegnato per {start.strftime('%d/%m/%Y %H:%M')}.",
             appuntamento_id=app.id,
+            paziente_id=wl.paziente_id,
         )
     )
 
@@ -324,6 +341,59 @@ def estrai_notifiche_pendenti(limit: int = 50) -> list[Notifica]:
         q = select(Notifica).where(Notifica.inviata_il.is_(None)).order_by(Notifica.creata_il.asc()).limit(limit)
         return list(s.scalars(q))
 
+from typing import Any
+
+def notifiche_pendenti_flat(limit: int = 200) -> list[dict[str, Any]]:
+    """
+    Notifiche pendenti in formato serializzabile con paziente.
+    Ricava il paziente tramite:
+      - Notifica.paziente_id (se presente)
+      - altrimenti Notifica.appuntamento_id -> Appuntamento.paziente_id
+    """
+    with db_session() as s:
+        q = (
+            select(
+                Notifica.id,
+                Notifica.tipo,
+                Notifica.creata_il,
+                Notifica.messaggio,
+                Notifica.appuntamento_id,
+                Notifica.paziente_id,
+                Paziente.nome.label("p_nome"),
+                Paziente.cognome.label("p_cognome"),
+            )
+            .select_from(Notifica)
+            .outerjoin(Appuntamento, Appuntamento.id == Notifica.appuntamento_id)
+            .outerjoin(
+                Paziente,
+                Paziente.id == func.coalesce(Notifica.paziente_id, Appuntamento.paziente_id),
+            )
+            .where(Notifica.inviata_il.is_(None))
+            .order_by(Notifica.creata_il.asc())
+            .limit(limit)
+        )
+
+        rows = s.execute(q).all()
+
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            tipo = r.tipo.value if hasattr(r.tipo, "value") else str(r.tipo)
+            paziente = f"{r.p_cognome} {r.p_nome}" if r.p_nome and r.p_cognome else None
+
+            out.append(
+                {
+                    "id": r.id,
+                    "tipo": tipo,
+                    "creata_il": r.creata_il.isoformat(),
+                    "messaggio": r.messaggio,
+                    "appuntamento_id": r.appuntamento_id,
+                    "paziente_id": r.paziente_id,
+                    "paziente_nome": r.p_nome,
+                    "paziente_cognome": r.p_cognome,
+                    "paziente": paziente,
+                }
+            )
+        return out
 
 def marca_notifica_inviata(notifica_id: int) -> bool:
     with db_session() as s:
@@ -333,8 +403,10 @@ def marca_notifica_inviata(notifica_id: int) -> bool:
         n.inviata_il = datetime.utcnow()
         return True
 
-from sqlalchemy import select
 
+# =========================
+# Lookup "flat" (safe per Streamlit/API)
+# =========================
 def lista_medici_flat() -> list[dict]:
     with db_session() as s:
         rows = s.execute(
@@ -358,8 +430,7 @@ def lista_pazienti_flat() -> list[dict]:
                 Paziente.cognome,
                 Paziente.email,
                 Paziente.telefono,
-            )
-            .order_by(Paziente.cognome, Paziente.nome)
+            ).order_by(Paziente.cognome, Paziente.nome)
         ).all()
 
         return [
@@ -386,8 +457,5 @@ def lista_sale_flat() -> list[dict]:
 
 def lista_tipi_visita_flat() -> list[dict]:
     with db_session() as s:
-        rows = s.execute(
-            select(TipoVisita.id, TipoVisita.nome, TipoVisita.durata_minuti)
-            .order_by(TipoVisita.nome)
-        ).all()
+        rows = s.execute(select(TipoVisita.id, TipoVisita.nome, TipoVisita.durata_minuti).order_by(TipoVisita.nome)).all()
         return [{"id": r.id, "nome": r.nome, "durata_minuti": r.durata_minuti} for r in rows]

@@ -17,6 +17,7 @@ from backend.services import (
     lista_sale_flat,
     lista_tipi_visita_flat,
     prenota_appuntamento,
+    notifiche_pendenti_flat
 )
 from backend.seed import seed_base
 
@@ -241,18 +242,5 @@ def api_agenda(
 
 
 @app.get("/api/notifiche/pendenti")
-def api_notifiche_pendenti(
-    limit: int = Query(200, ge=1, le=1000),
-    user: Utente = Depends(get_current_user),
-) -> list[dict]:
-    items = estrai_notifiche_pendenti(limit=limit)
-    # Normalizza a dict serializzabili
-    return [
-        {
-            "id": n.id,
-            "tipo": n.tipo.value,
-            "creata_il": n.creata_il.isoformat(),
-            "messaggio": n.messaggio,
-        }
-        for n in items
-    ]
+def api_notifiche_pendenti(limit: int = 200, user=Depends(get_current_user)) -> list[dict]:
+    return notifiche_pendenti_flat(limit=limit)

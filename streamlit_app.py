@@ -420,7 +420,9 @@ with tab4:
                 st.info("Nessuna notifica pendente.")
             else:
                 for n in pendenti:
-                    st.write(f"[{n['id']}] **{n['tipo']}** | {n['creata_il']} | {n['messaggio']}")
+                    paz = n.get("paziente") or "-"
+                    st.write(f"[{n['id']}] **{n['tipo']}** | {n['creata_il']} | Paziente: **{paz}** | {n['messaggio']}")
+
         except PermissionError as e:
             st.session_state["auth_error"] = str(e)
             st.error("Sessione non valida. Premi Logout e rifai login.")
