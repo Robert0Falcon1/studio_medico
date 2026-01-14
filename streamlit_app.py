@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
+import json
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 import requests
 import streamlit as st
@@ -12,6 +14,43 @@ API_BASE = os.getenv("API_BASE", "http://127.0.0.1:8000")
 
 
 # =========================
+# JWT helpers (solo per UI, senza verifica firma)
+# =========================
+def _b64url_decode(data: str) -> bytes:
+    padding = "=" * (-len(data) % 4)
+    return base64.urlsafe_b64decode(data + padding)
+
+
+def jwt_payload(token: str) -> dict:
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return {}
+        payload = json.loads(_b64url_decode(parts[1]).decode("utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def jwt_is_expired(token: str) -> bool:
+    p = jwt_payload(token)
+    exp = p.get("exp")
+    try:
+        exp_int = int(exp)
+    except Exception:
+        return False
+
+    now = int(datetime.now(tz=timezone.utc).timestamp())
+    return now >= (exp_int - 5)
+
+
+
+def jwt_username(token: str) -> str:
+    p = jwt_payload(token)
+    return str(p.get("username") or p.get("sub") or "utente")
+
+
+# =========================
 # HTTP client (con JWT)
 # =========================
 def api_get(path: str, token: str | None = None, params: dict | None = None) -> dict | list:
@@ -19,10 +58,10 @@ def api_get(path: str, token: str | None = None, params: dict | None = None) -> 
     if token:
         headers["Authorization"] = f"Bearer {token}"
     r = requests.get(f"{API_BASE}{path}", headers=headers, params=params, timeout=10)
+
     if r.status_code == 401:
-        # token scaduto/non valido -> logout automatico
-        st.session_state.pop("token", None)
-        raise PermissionError("Sessione non valida o scaduta. Effettua di nuovo il login.")
+        raise PermissionError("401 Unauthorized (token non valido/scaduto oppure backend riavviato).")
+
     r.raise_for_status()
     return r.json()
 
@@ -32,9 +71,10 @@ def api_post(path: str, payload: dict, token: str | None = None) -> dict:
     if token:
         headers["Authorization"] = f"Bearer {token}"
     r = requests.post(f"{API_BASE}{path}", headers=headers, json=payload, timeout=10)
+
     if r.status_code == 401:
-        st.session_state.pop("token", None)
-        raise PermissionError("Sessione non valida o scaduta. Effettua di nuovo il login.")
+        raise PermissionError("401 Unauthorized (token non valido/scaduto oppure backend riavviato).")
+
     r.raise_for_status()
     return r.json()
 
@@ -51,7 +91,28 @@ def api_login(username: str, password: str) -> str:
 
 
 def is_logged_in() -> bool:
-    return bool(st.session_state.get("token"))
+    token = st.session_state.get("token")
+    return bool(token) and isinstance(token, str) and len(token) > 0
+
+
+def do_logout() -> None:
+    st.session_state.pop("token", None)
+    st.session_state.pop("auth_error", None)
+    st.rerun()
+
+
+def require_auth() -> str | None:
+    token = st.session_state.get("token")
+    if not token:
+        st.warning("Sezione riservata. Effettua il login dalla sidebar.")
+        return None
+
+    if jwt_is_expired(token):
+        st.error("Sessione scaduta. Effettua Logout dalla sidebar e rifai login.")
+        return None
+
+    return token
+
 
 
 # =========================
@@ -60,14 +121,17 @@ def is_logged_in() -> bool:
 with st.sidebar:
     st.header("Accesso")
 
+    token = st.session_state.get("token")
+
     if not is_logged_in():
         u = st.text_input("Username", key="login_user")
         p = st.text_input("Password", type="password", key="login_pass")
 
         if st.button("Login", key="login_btn"):
             try:
-                token = api_login(u.strip().lower(), p)
-                st.session_state["token"] = token
+                new_token = api_login(u.strip().lower(), p)
+                st.session_state["token"] = new_token
+                st.session_state.pop("auth_error", None)
                 st.success("Login effettuato.")
                 st.rerun()
             except requests.HTTPError:
@@ -75,18 +139,15 @@ with st.sidebar:
             except Exception as e:
                 st.error(str(e))
     else:
-        token = st.session_state["token"]
-        try:
-            me = api_get("/api/me", token=token)
-            st.write(f"Utente: **{me['username']}**")
-        except Exception:
-            st.warning("Token non valido. Rifai login.")
-            st.session_state.pop("token", None)
-            st.rerun()
+        # Mostro info dal token senza chiamare /api/me (evita logout su rerun)
+        user = jwt_username(token)
+        st.write(f"Utente: **{user}**")
+
+        if st.session_state.get("auth_error"):
+            st.error(st.session_state["auth_error"])
 
         if st.button("Logout", key="logout_btn"):
-            st.session_state.pop("token", None)
-            st.rerun()
+            do_logout()
 
     st.divider()
     st.caption(f"API: {API_BASE}")
@@ -156,7 +217,11 @@ with tab1:
             key="pren_tipo",
         )
         start_date = st.date_input("Data", value=date.today(), key="pren_data")
-        start_time = st.time_input("Ora", value=datetime.now().time().replace(second=0, microsecond=0), key="pren_ora")
+        start_time = st.time_input(
+            "Ora",
+            value=datetime.now().time().replace(second=0, microsecond=0),
+            key="pren_ora",
+        )
 
     with colC:
         note = st.text_area("Note (opzionale)", height=100, key="pren_note")
@@ -164,9 +229,6 @@ with tab1:
 
     st.divider()
 
-    # Due modalità:
-    # - Non loggato: prenotazione pubblica -> inserisco dati paziente a mano
-    # - Loggato: prenotazione interna -> scelgo paziente esistente (API protetta)
     token = st.session_state.get("token")
 
     if not is_logged_in():
@@ -209,40 +271,51 @@ with tab1:
     else:
         st.success("Modalità interna (loggato): seleziona un paziente esistente.")
 
-        try:
-            pazienti = api_get("/api/pazienti", token=token)
-        except Exception as e:
-            st.error(str(e))
-            pazienti = []
-
-        paziente = st.selectbox(
-            "Paziente",
-            options=pazienti,
-            format_func=lambda p: f"{p['cognome']} {p['nome']} ({p.get('email') or '-'}) | {p.get('telefono') or '-'}",
-            key="pren_paziente",
-        )
-
-        if st.button("Conferma prenotazione (interna)", key="pren_int_submit", disabled=not bool(pazienti)):
-            start_dt = datetime.combine(start_date, start_time)
-            payload = {
-                "paziente_id": paziente["id"],
-                "medico_id": medico["id"],
-                "tipo_visita_id": tipo["id"],
-                "sala_id": sala["id"],
-                "start": start_dt.isoformat(),
-                "note": note or None,
-                "inserisci_waitlist_se_pieno": waitlist,
-            }
+        if jwt_is_expired(token):
+            st.error("Sessione scaduta. Premi Logout e rifai login.")
+        else:
             try:
-                res = api_post("/api/appuntamenti", payload, token=token)
-                if res.get("ok") and res.get("appuntamento_id"):
-                    st.success(f"{res.get('messaggio')} (ID: {res.get('appuntamento_id')})")
-                elif res.get("ok") and res.get("messo_in_waitlist"):
-                    st.warning(res.get("messaggio"))
-                else:
-                    st.error(res.get("messaggio") or "Errore prenotazione.")
+                pazienti = api_get("/api/pazienti", token=token)
+            except PermissionError as e:
+                st.session_state["auth_error"] = str(e)
+                st.error("Sessione non valida. Premi Logout e rifai login.")
+                pazienti = []
             except Exception as e:
-                st.error(str(e))
+                # non logout automatico: errore temporaneo
+                st.error(f"Errore caricamento pazienti: {e}")
+                pazienti = []
+
+            paziente = st.selectbox(
+                "Paziente",
+                options=pazienti,
+                format_func=lambda p: f"{p['cognome']} {p['nome']} ({p.get('email') or '-'}) | {p.get('telefono') or '-'}",
+                key="pren_paziente",
+            )
+
+            if st.button("Conferma prenotazione (interna)", key="pren_int_submit", disabled=not bool(pazienti)):
+                start_dt = datetime.combine(start_date, start_time)
+                payload = {
+                    "paziente_id": paziente["id"],
+                    "medico_id": medico["id"],
+                    "tipo_visita_id": tipo["id"],
+                    "sala_id": sala["id"],
+                    "start": start_dt.isoformat(),
+                    "note": note or None,
+                    "inserisci_waitlist_se_pieno": waitlist,
+                }
+                try:
+                    res = api_post("/api/appuntamenti", payload, token=token)
+                    if res.get("ok") and res.get("appuntamento_id"):
+                        st.success(f"{res.get('messaggio')} (ID: {res.get('appuntamento_id')})")
+                    elif res.get("ok") and res.get("messo_in_waitlist"):
+                        st.warning(res.get("messaggio"))
+                    else:
+                        st.error(res.get("messaggio") or "Errore prenotazione.")
+                except PermissionError as e:
+                    st.session_state["auth_error"] = str(e)
+                    st.error("Sessione non valida. Premi Logout e rifai login.")
+                except Exception as e:
+                    st.error(str(e))
 
 
 # =========================
@@ -251,10 +324,8 @@ with tab1:
 with tab2:
     st.subheader("Agenda giornaliera (sezione riservata)")
 
-    if not is_logged_in():
-        st.warning("Sezione riservata. Effettua il login per visualizzare l’agenda.")
-    else:
-        token = st.session_state["token"]
+    token = require_auth()
+    if token:
         medici = load_medici()
 
         medico_agenda = st.selectbox(
@@ -266,7 +337,11 @@ with tab2:
         giorno = st.date_input("Giorno", value=date.today(), key="agenda_giorno")
 
         try:
-            items = api_get("/api/agenda", token=token, params={"medico_id": medico_agenda["id"], "giorno": giorno.isoformat()})
+            items = api_get(
+                "/api/agenda",
+                token=token,
+                params={"medico_id": medico_agenda["id"], "giorno": giorno.isoformat()},
+            )
             if not items:
                 st.info("Nessun appuntamento per questo giorno.")
             else:
@@ -275,8 +350,11 @@ with tab2:
                         f"- **{a['inizio']} - {a['fine']}** | "
                         f"Tipo: {a['tipo_visita']} | Sala: {a['sala']} | Stato: {a['stato']} | Note: {a['note'] or '-'}"
                     )
+        except PermissionError as e:
+            st.session_state["auth_error"] = str(e)
+            st.error("Sessione non valida. Premi Logout e rifai login.")
         except Exception as e:
-            st.error(str(e))
+            st.error(f"Errore agenda: {e}")
 
 
 # =========================
@@ -285,11 +363,8 @@ with tab2:
 with tab3:
     st.subheader("Gestione pazienti (sezione riservata)")
 
-    if not is_logged_in():
-        st.warning("Sezione riservata. Effettua il login per gestire i pazienti.")
-    else:
-        token = st.session_state["token"]
-
+    token = require_auth()
+    if token:
         with st.expander("Crea nuovo paziente"):
             c1, c2 = st.columns(2)
             nome = c1.text_input("Nome", key="paz_nome")
@@ -308,11 +383,15 @@ with tab3:
                             token=token,
                         )
                         st.success(f"Paziente creato: {res.get('paziente_id')}")
+                    except PermissionError as e:
+                        st.session_state["auth_error"] = str(e)
+                        st.error("Sessione non valida. Premi Logout e rifai login.")
                     except Exception as e:
                         st.error(str(e))
 
         st.divider()
         st.write("Elenco pazienti:")
+
         try:
             pazienti = api_get("/api/pazienti", token=token)
             if not pazienti:
@@ -320,8 +399,11 @@ with tab3:
             else:
                 for p in pazienti:
                     st.write(f"- {p['cognome']} {p['nome']} | {p.get('email') or '-'} | {p.get('telefono') or '-'}")
+        except PermissionError as e:
+            st.session_state["auth_error"] = str(e)
+            st.error("Sessione non valida. Premi Logout e rifai login.")
         except Exception as e:
-            st.error(str(e))
+            st.error(f"Errore caricamento pazienti: {e}")
 
 
 # =========================
@@ -330,10 +412,8 @@ with tab3:
 with tab4:
     st.subheader("Notifiche pendenti (sezione riservata)")
 
-    if not is_logged_in():
-        st.warning("Sezione riservata. Effettua il login per visualizzare le notifiche.")
-    else:
-        token = st.session_state["token"]
+    token = require_auth()
+    if token:
         try:
             pendenti = api_get("/api/notifiche/pendenti", token=token, params={"limit": 200})
             if not pendenti:
@@ -341,5 +421,8 @@ with tab4:
             else:
                 for n in pendenti:
                     st.write(f"[{n['id']}] **{n['tipo']}** | {n['creata_il']} | {n['messaggio']}")
+        except PermissionError as e:
+            st.session_state["auth_error"] = str(e)
+            st.error("Sessione non valida. Premi Logout e rifai login.")
         except Exception as e:
-            st.error(str(e))
+            st.error(f"Errore notifiche: {e}")

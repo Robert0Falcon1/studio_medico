@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from jose import JWTError, jwt
@@ -29,8 +29,9 @@ def verify_password(password: str, password_hash: str) -> bool:
 def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> str:
     """
     subject: tipicamente user_id (o username).
+    Usa datetime timezone-aware per evitare offset/bug su timestamp.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
     payload: dict[str, Any] = {
@@ -42,7 +43,6 @@ def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> st
         payload.update(extra)
 
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALG)
-
 
 def decode_token(token: str) -> dict[str, Any]:
     return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
