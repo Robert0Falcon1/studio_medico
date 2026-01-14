@@ -298,7 +298,6 @@ studio_medico/
 │   └── services.py                 # Logica applicativa
 ├── progettazione/                  # Diagrammi .puml e .bpmn
 ├── streamlit_app.py                # Frontend Streamlit
-├── register.json                   # File temporaneo registrazione
 ├── requirements.txt                # Dipendenze Python
 ├── .env.example                    # Template configurazione
 ├── .gitignore                      # File esclusi da Git
