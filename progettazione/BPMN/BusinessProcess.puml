@@ -1,0 +1,121 @@
+@startuml
+!pragma useVerticalIf on
+skinparam ActivityDiamondBackgroundColor #lightblue
+skinparam ActivityBackgroundColor #lightgreen
+skinparam ActivityBorderColor #000000
+
+title Processo Gestione Agenda Giornaliera Medico - BPMN
+
+|Medico|
+start
+:Accede al sistema;
+
+:Visualizza agenda
+giornaliera;
+
+|Sistema|
+:Carica appuntamenti
+del giorno;
+
+:Ordina per orario;
+
+|Medico|
+:Seleziona primo
+appuntamento;
+
+repeat
+  |Sistema|
+  :Carica dati paziente;
+  
+  :Mostra storico visite
+  e cartella clinica;
+  
+  |Medico|
+  :Consulta informazioni
+  paziente;
+  
+  if (Paziente\npresentato?) then (sì)
+    |Sistema|
+    :Aggiorna stato
+    appuntamento: IN_CORSO;
+    
+    |Medico|
+    :Esegue visita;
+    
+    :Registra diagnosi
+    e terapia nella cartella;
+    
+    :Compila note cliniche;
+    
+    if (Necessario\nappuntamento futuro?) then (sì)
+      :Programma prossima
+      visita di controllo;
+      
+      |Sistema|
+      :Verifica disponibilità
+      future del medico;
+      
+      :Crea nuovo
+      appuntamento;
+      
+      |Medico|
+    endif
+    
+    |Sistema|
+    :Aggiorna stato
+    appuntamento: COMPLETATO;
+    
+    :Salva cartella
+    clinica aggiornata;
+    
+    :Invia email riepilogo
+    al paziente;
+    
+  else (no)
+    |Sistema|
+    :Aggiorna stato
+    appuntamento: NON_PRESENTATO;
+    
+    |Medico|
+    :Annota assenza;
+    
+    |Sistema|
+    if (Lista d'attesa\nesiste?) then (sì)
+      :Notifica disponibilità
+      slot improvvisa;
+      
+      |Lista d'Attesa|
+      :Contatta primo
+      paziente in attesa;
+      
+      |Sistema|
+    endif
+  endif
+  
+  |Medico|
+  if (Altri appuntamenti\nrimanenti?) then (sì)
+    :Seleziona prossimo
+    appuntamento;
+    
+  else (no)
+    break
+  endif
+  
+repeat while (Ci sono altri\nappuntamenti?)
+
+|Medico|
+:Revisiona giornata;
+
+|Sistema|
+:Genera statistiche
+giornaliere;
+
+:Salva report
+attività;
+
+|Medico|
+:Logout dal sistema;
+
+stop
+
+@enduml

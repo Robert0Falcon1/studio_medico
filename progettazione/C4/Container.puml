@@ -1,0 +1,75 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Container Diagram - Sistema Gestione Appuntamenti Studio Medico
+
+Person(patient, "Paziente", "Prenota e gestisce appuntamenti")
+Person(doctor, "Medico", "Gestisce agenda e pazienti")
+Person(admin, "Amministratore", "Configura sistema")
+
+System_Boundary(medical_system, "Sistema Gestione Appuntamenti") {
+    Container(web_patient, "Applicazione Web Pazienti", "React, TypeScript", "Interfaccia per prenotazione e gestione appuntamenti")
+    Container(web_doctor, "Applicazione Web Medici", "React, TypeScript", "Interfaccia per agenda e cartelle pazienti")
+    Container(web_admin, "Dashboard Amministrativa", "React, TypeScript", "Interfaccia di configurazione e reporting")
+    Container(mobile_app, "App Mobile", "React Native", "App per pazienti iOS/Android")
+    
+    Container(api_gateway, "API Gateway", "Node.js, Express", "Punto di ingresso unico per tutte le API")
+    
+    Container(appointment_service, "Appointment Service", "Node.js/Java", "Gestisce logica prenotazioni e disponibilità")
+    Container(patient_service, "Patient Service", "Node.js/Java", "Gestisce anagrafica e cartelle pazienti")
+    Container(doctor_service, "Doctor Service", "Node.js/Java", "Gestisce medici e orari")
+    Container(resource_service, "Resource Service", "Node.js/Java", "Gestisce sale e attrezzature")
+    Container(notification_service, "Notification Service", "Node.js", "Gestisce invio notifiche")
+    
+    ContainerDb(main_db, "Database Principale", "PostgreSQL", "Memorizza appuntamenti, pazienti, medici")
+    ContainerDb(cache, "Cache", "Redis", "Cache per disponibilità e sessioni")
+    
+    Container(scheduler, "Task Scheduler", "Node.js/Cron", "Esegue task programmati (promemoria, cleanup)")
+}
+
+System_Ext(email_system, "Email Service", "SendGrid/AWS SES")
+System_Ext(sms_system, "SMS Gateway", "Twilio")
+System_Ext(calendar_system, "Calendar API", "Google/Outlook")
+System_Ext(payment_system, "Payment Gateway", "Stripe")
+
+' User Relations
+Rel(patient, web_patient, "Usa", "HTTPS")
+Rel(patient, mobile_app, "Usa", "HTTPS")
+Rel(doctor, web_doctor, "Usa", "HTTPS")
+Rel(admin, web_admin, "Usa", "HTTPS")
+
+' Frontend to Gateway
+Rel(web_patient, api_gateway, "Chiama API", "JSON/HTTPS")
+Rel(web_doctor, api_gateway, "Chiama API", "JSON/HTTPS")
+Rel(web_admin, api_gateway, "Chiama API", "JSON/HTTPS")
+Rel(mobile_app, api_gateway, "Chiama API", "JSON/HTTPS")
+
+' Gateway to Services
+Rel(api_gateway, appointment_service, "Inoltra richieste", "REST/gRPC")
+Rel(api_gateway, patient_service, "Inoltra richieste", "REST/gRPC")
+Rel(api_gateway, doctor_service, "Inoltra richieste", "REST/gRPC")
+Rel(api_gateway, resource_service, "Inoltra richieste", "REST/gRPC")
+
+' Services to DB
+Rel(appointment_service, main_db, "Legge/Scrive", "SQL")
+Rel(patient_service, main_db, "Legge/Scrive", "SQL")
+Rel(doctor_service, main_db, "Legge/Scrive", "SQL")
+Rel(resource_service, main_db, "Legge/Scrive", "SQL")
+
+' Services to Cache
+Rel(appointment_service, cache, "Cache disponibilità", "Redis Protocol")
+Rel(api_gateway, cache, "Sessioni utente", "Redis Protocol")
+
+' Notification Service
+Rel(appointment_service, notification_service, "Trigger notifiche", "Message Queue")
+Rel(scheduler, notification_service, "Trigger promemoria", "Message Queue")
+Rel(notification_service, email_system, "Invia email", "SMTP/API")
+Rel(notification_service, sms_system, "Invia SMS", "REST API")
+
+' External Integrations
+Rel(appointment_service, calendar_system, "Sincronizza", "REST API")
+Rel(appointment_service, payment_system, "Processa pagamenti", "REST API")
+
+@enduml

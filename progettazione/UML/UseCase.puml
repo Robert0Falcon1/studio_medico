@@ -1,0 +1,84 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Paziente" as patient
+actor "Personale Medico" as doctor
+actor "Amministratore" as admin
+actor "Sistema Notifiche" as notif
+
+rectangle "Sistema Gestione Appuntamenti Studio Medico" {
+  
+  package "Gestione Pazienti" {
+    usecase "Registrare Paziente" as UC1
+    usecase "Consultare Cartella" as UC2
+    usecase "Aggiornare Dati Anagrafici" as UC3
+    usecase "Visualizzare Storico Visite" as UC4
+  }
+  
+  package "Gestione Appuntamenti" {
+    usecase "Visualizzare Disponibilità" as UC5
+    usecase "Prenotare Appuntamento" as UC6
+    usecase "Modificare Appuntamento" as UC7
+    usecase "Cancellare Appuntamento" as UC8
+    usecase "Gestire Lista d'Attesa" as UC9
+    usecase "Verificare Disponibilità Medico" as UC10
+    usecase "Verificare Disponibilità Sala" as UC11
+  }
+  
+  package "Gestione Agenda Medica" {
+    usecase "Visualizzare Agenda Giornaliera" as UC12
+    usecase "Consultare Dati Paziente" as UC13
+    usecase "Registrare Esito Visita" as UC14
+    usecase "Gestire Orari Disponibilità" as UC15
+  }
+  
+  package "Amministrazione" {
+    usecase "Gestire Medici" as UC16
+    usecase "Gestire Sale Visite" as UC17
+    usecase "Generare Report" as UC18
+    usecase "Configurare Tipologie Visite" as UC19
+  }
+  
+  package "Notifiche" {
+    usecase "Inviare Promemoria" as UC20
+    usecase "Confermare Appuntamento" as UC21
+  }
+}
+
+' Relazioni Paziente
+patient --> UC5
+patient --> UC6
+patient --> UC7
+patient --> UC8
+patient --> UC4
+
+' Relazioni Personale Medico
+doctor --> UC12
+doctor --> UC13
+doctor --> UC14
+doctor --> UC2
+doctor --> UC15
+
+' Relazioni Amministratore
+admin --> UC1
+admin --> UC3
+admin --> UC16
+admin --> UC17
+admin --> UC18
+admin --> UC19
+admin --> UC9
+
+' Relazioni Sistema Notifiche
+notif --> UC20
+notif --> UC21
+
+' Include relationships
+UC6 ..> UC10 : <<include>>
+UC6 ..> UC11 : <<include>>
+UC7 ..> UC10 : <<include>>
+UC12 ..> UC13 : <<include>>
+UC20 ..> UC6 : <<extend>>
+UC21 ..> UC6 : <<extend>>
+
+@enduml

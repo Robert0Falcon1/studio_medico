@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Context Diagram - Sistema Gestione Appuntamenti Studio Medico
+
+Person(patient, "Paziente", "Utente che prenota e gestisce i propri appuntamenti medici")
+Person(doctor, "Medico", "Professionista sanitario che eroga le prestazioni")
+Person(admin, "Amministratore", "Personale amministrativo che gestisce il sistema")
+
+System(medical_system, "Sistema Gestione Appuntamenti", "Gestisce prenotazioni, agenda medica, cartelle pazienti e risorse dello studio medico")
+
+System_Ext(email_system, "Sistema Email", "Servizio di invio email per notifiche e promemoria")
+System_Ext(sms_system, "Gateway SMS", "Servizio di invio SMS per conferme appuntamenti")
+System_Ext(calendar_system, "Calendario Esterno", "Google Calendar / Outlook per sincronizzazione agenda")
+System_Ext(payment_system, "Sistema Pagamenti", "Gateway per pagamenti online delle visite")
+
+Rel(patient, medical_system, "Prenota appuntamenti, consulta storico", "HTTPS/Web/Mobile")
+Rel(doctor, medical_system, "Gestisce agenda, consulta cartelle", "HTTPS/Web")
+Rel(admin, medical_system, "Configura sistema, gestisce risorse", "HTTPS/Web")
+
+Rel(medical_system, email_system, "Invia notifiche e promemoria", "SMTP/API")
+Rel(medical_system, sms_system, "Invia conferme appuntamenti", "REST API")
+Rel(medical_system, calendar_system, "Sincronizza appuntamenti", "CalDAV/API")
+Rel(medical_system, payment_system, "Elabora pagamenti", "REST API")
+
+Rel(email_system, patient, "Riceve email", "SMTP")
+Rel(sms_system, patient, "Riceve SMS", "SMS")
+
+@enduml

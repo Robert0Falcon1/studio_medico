@@ -1,0 +1,246 @@
+@startuml
+skinparam componentStyle rectangle
+
+' Client Devices
+node "Patient Device" <<device>> {
+  component [Web Browser] as PWB
+  component [Mobile App\niOS/Android] as MA
+}
+
+node "Doctor Workstation" <<device>> {
+  component [Web Browser] as DWB
+}
+
+node "Admin Workstation" <<device>> {
+  component [Web Browser] as AWB
+}
+
+' CDN Layer
+cloud "CDN" {
+  node "CloudFlare" <<CDN>> {
+    artifact [Static Assets] as SA
+    artifact [JS/CSS/Images] as JSCSS
+  }
+}
+
+' Load Balancer
+node "Load Balancer" <<nginx>> {
+  component [Nginx\nLoad Balancer] as LB
+}
+
+' Application Servers
+cloud "Application Tier" {
+  node "Web Server 1" <<docker>> {
+    component [API Gateway\nNode.js] as AG1
+  }
+  
+  node "Web Server 2" <<docker>> {
+    component [API Gateway\nNode.js] as AG2
+  }
+  
+  node "App Server 1" <<docker>> {
+    component [Appointment Service] as AS1
+    component [Patient Service] as PS1
+  }
+  
+  node "App Server 2" <<docker>> {
+    component [Appointment Service] as AS2
+    component [Doctor Service] as DS1
+  }
+  
+  node "App Server 3" <<docker>> {
+    component [Resource Service] as RS1
+    component [Notification Service] as NS1
+  }
+}
+
+' Cache Layer
+node "Cache Cluster" <<redis>> {
+  database "Redis Master" as RM {
+    artifact [Session Data] as SD
+    artifact [Availability Cache] as AC
+  }
+  
+  database "Redis Replica 1" as RR1
+  database "Redis Replica 2" as RR2
+}
+
+' Database Cluster
+node "Database Cluster" <<postgresql>> {
+  database "PostgreSQL Primary" as PGP {
+    artifact [Appointments DB] as ADB
+    artifact [Patients DB] as PADB
+    artifact [Doctors DB] as DDB
+    artifact [Resources DB] as RDB
+  }
+  
+  database "PostgreSQL Standby 1" as PGS1 {
+    artifact [Read Replica] as RR_1
+  }
+  
+  database "PostgreSQL Standby 2" as PGS2 {
+    artifact [Read Replica] as RR_2
+  }
+}
+
+' Message Queue
+node "Message Broker" <<rabbitmq>> {
+  component [RabbitMQ] as MQ
+  queue [Notification Queue] as NQ
+  queue [Event Queue] as EQ
+}
+
+' Background Workers
+node "Worker Nodes" <<docker>> {
+  component [Task Scheduler\nCron Jobs] as TS
+  component [Email Worker] as EW
+  component [SMS Worker] as SW
+  component [Report Generator] as RG
+}
+
+' External Services
+cloud "External Services" {
+  node "Email Provider" <<SaaS>> {
+    component [SendGrid/SES] as ESP
+  }
+  
+  node "SMS Gateway" <<SaaS>> {
+    component [Twilio] as SMSG
+  }
+  
+  node "Calendar API" <<SaaS>> {
+    component [Google Calendar] as GC
+    component [Outlook] as OC
+  }
+  
+  node "Payment Gateway" <<SaaS>> {
+    component [Stripe] as PG
+  }
+}
+
+' Monitoring & Logging
+node "Monitoring Stack" <<docker>> {
+  component [Prometheus] as PROM
+  component [Grafana] as GRAF
+  component [ELK Stack] as ELK
+}
+
+' Backup Storage
+node "Backup Server" <<storage>> {
+  database "Backup Storage" as BS {
+    artifact [Daily Backups] as DB
+    artifact [WAL Archives] as WA
+  }
+}
+
+' Client Connections
+PWB -down-> LB : HTTPS
+MA -down-> LB : HTTPS
+DWB -down-> LB : HTTPS
+AWB -down-> LB : HTTPS
+
+PWB -down-> SA : HTTPS
+MA -down-> SA : HTTPS
+DWB -down-> SA : HTTPS
+AWB -down-> SA : HTTPS
+
+' Load Balancer Distribution
+LB -down-> AG1 : HTTP/2
+LB -down-> AG2 : HTTP/2
+
+' API Gateway to Services
+AG1 -down-> AS1 : gRPC/REST
+AG1 -down-> PS1 : gRPC/REST
+AG2 -down-> AS2 : gRPC/REST
+AG2 -down-> DS1 : gRPC/REST
+AG1 -down-> RS1 : gRPC/REST
+AG2 -down-> NS1 : gRPC/REST
+
+' Services to Cache
+AS1 -right-> RM : Redis Protocol
+AS2 -right-> RM : Redis Protocol
+AG1 -right-> RM : Session
+AG2 -right-> RM : Session
+
+' Redis Replication
+RM -down-> RR1 : Replication
+RM -down-> RR2 : Replication
+
+' Services to Database
+AS1 -down-> PGP : SQL/Write
+AS2 -down-> PGP : SQL/Write
+PS1 -down-> PGS1 : SQL/Read
+DS1 -down-> PGS2 : SQL/Read
+RS1 -down-> PGP : SQL/Write
+
+' PostgreSQL Replication
+PGP -down-> PGS1 : Streaming\nReplication
+PGP -down-> PGS2 : Streaming\nReplication
+
+' Message Queue
+NS1 -down-> MQ : AMQP
+AS1 -down-> MQ : AMQP
+AS2 -down-> MQ : AMQP
+
+' Workers
+MQ -down-> EW : Consume
+MQ -down-> SW : Consume
+TS -up-> MQ : Publish
+
+' External Services
+EW -down-> ESP : SMTP/API
+SW -down-> SMSG : REST API
+AS1 -down-> GC : REST API
+AS2 -down-> OC : REST API
+AS1 -down-> PG : REST API
+
+' Monitoring
+AG1 -right-> PROM : Metrics
+AG2 -right-> PROM : Metrics
+AS1 -right-> PROM : Metrics
+AS2 -right-> PROM : Metrics
+PROM -down-> GRAF : Query
+AG1 -right-> ELK : Logs
+AS1 -right-> ELK : Logs
+
+' Backup
+PGP -down-> BS : pg_basebackup\nWAL shipping
+
+note right of LB
+  **Load Balancer**
+  - SSL Termination
+  - Health Checks
+  - Rate Limiting
+  - DDoS Protection
+end note
+
+note right of RM
+  **Cache Strategy**
+  - Availability: 5min TTL
+  - Sessions: 24h TTL
+  - Master-Replica setup
+end note
+
+note right of PGP
+  **Database**
+  - Primary: Write operations
+  - Standby: Read operations
+  - Auto-failover enabled
+  - Daily backups
+end note
+
+note right of MQ
+  **Message Queue**
+  - Asynchronous processing
+  - Retry mechanism
+  - Dead letter queue
+end note
+
+note bottom of "External Services"
+  **Third-party APIs**
+  - Circuit breaker pattern
+  - Fallback mechanisms
+  - API key rotation
+end note
+
+@enduml

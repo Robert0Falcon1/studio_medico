@@ -1,0 +1,164 @@
+@startuml
+skinparam linetype ortho
+
+class Medico {
+  - id: UUID
+  - nome: String
+  - cognome: String
+  - specializzazione: String
+  - telefono: String
+  - email: String
+  - attivo: Boolean
+  --
+  + getDisponibilita(data: Date): List<Slot>
+  + aggiornaOrari(): void
+}
+
+class OrarioDisponibilita {
+  - id: UUID
+  - medicoId: UUID
+  - giornoSettimana: Integer
+  - oraInizio: Time
+  - oraFine: Time
+  - durataSlot: Integer
+  --
+  + isDisponibile(data: DateTime): Boolean
+}
+
+class Paziente {
+  - id: UUID
+  - nome: String
+  - cognome: String
+  - codiceFiscale: String
+  - dataNascita: Date
+  - telefono: String
+  - email: String
+  - indirizzo: String
+  --
+  + getStoricoVisite(): List<Appuntamento>
+  + aggiornaContatti(): void
+}
+
+class ContattoEmergenza {
+  - id: UUID
+  - pazienteId: UUID
+  - nome: String
+  - telefono: String
+  - relazione: String
+}
+
+class Appuntamento {
+  - id: UUID
+  - medicoId: UUID
+  - pazienteId: UUID
+  - salaVisitaId: UUID
+  - dataOra: DateTime
+  - durata: Integer
+  - tipoVisita: String
+  - stato: StatoAppuntamento
+  - note: String
+  - dataCreazione: DateTime
+  - dataModifica: DateTime
+  --
+  + verifica(): Boolean
+  + modifica(nuovaData: DateTime): Boolean
+  + cancella(motivazione: String): void
+  + conferma(): void
+}
+
+enum StatoAppuntamento {
+  PRENOTATO
+  CONFERMATO
+  IN_CORSO
+  COMPLETATO
+  CANCELLATO
+  NON_PRESENTATO
+}
+
+class TipoVisita {
+  - id: UUID
+  - nome: String
+  - descrizione: String
+  - durataStandard: Integer
+  - costo: Decimal
+  - colore: String
+}
+
+class SalaVisita {
+  - id: UUID
+  - numero: String
+  - piano: Integer
+  - capienza: Integer
+  - attiva: Boolean
+  --
+  + verificaDisponibilita(dataOra: DateTime, durata: Integer): Boolean
+}
+
+class AttrezzaturaSala {
+  - id: UUID
+  - salaVisitaId: UUID
+  - nomeAttrezzatura: String
+  - quantita: Integer
+  - stato: String
+}
+
+class ListaAttesa {
+  - id: UUID
+  - pazienteId: UUID
+  - medicoId: UUID
+  - tipoVisitaId: UUID
+  - dataRichiesta: DateTime
+  - priorita: Integer
+  - note: String
+  - stato: String
+  --
+  + notificaDisponibilita(): void
+}
+
+class CartellaClinica {
+  - id: UUID
+  - pazienteId: UUID
+  - appuntamentoId: UUID
+  - dataVisita: Date
+  - diagnosi: Text
+  - terapia: Text
+  - note: Text
+  - medicoId: UUID
+}
+
+class Notifica {
+  - id: UUID
+  - destinatarioId: UUID
+  - tipo: TipoNotifica
+  - messaggio: String
+  - dataInvio: DateTime
+  - letto: Boolean
+  - appuntamentoId: UUID
+}
+
+enum TipoNotifica {
+  PROMEMORIA
+  CONFERMA
+  MODIFICA
+  CANCELLAZIONE
+  DISPONIBILITA
+}
+
+' Relazioni
+Medico "1" -- "0..*" OrarioDisponibilita : ha >
+Medico "1" -- "0..*" Appuntamento : esegue >
+Paziente "1" -- "0..*" ContattoEmergenza : ha >
+Paziente "1" -- "0..*" Appuntamento : prenota >
+Paziente "1" -- "0..*" ListaAttesa : richiede >
+Paziente "1" -- "0..*" CartellaClinica : possiede >
+Appuntamento "*" -- "1" TipoVisita : tipo >
+Appuntamento "*" -- "1" SalaVisita : utilizza >
+Appuntamento "1" -- "0..1" CartellaClinica : genera >
+Appuntamento -- StatoAppuntamento
+SalaVisita "1" -- "0..*" AttrezzaturaSala : contiene >
+ListaAttesa "*" -- "1" Medico : per >
+ListaAttesa "*" -- "1" TipoVisita : richiede >
+Notifica "*" -- "0..1" Appuntamento : riferita a >
+Notifica -- TipoNotifica
+
+@enduml

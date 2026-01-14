@@ -1,0 +1,82 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Component Diagram - Appointment Service
+
+Container(api_gateway, "API Gateway", "Node.js", "Gateway delle API")
+ContainerDb(main_db, "Database", "PostgreSQL", "Database principale")
+ContainerDb(cache, "Cache", "Redis", "Cache dati")
+Container(notification_service, "Notification Service", "Node.js", "Servizio notifiche")
+
+Container_Boundary(appointment_service, "Appointment Service") {
+    Component(appointment_controller, "Appointment Controller", "REST Controller", "Gestisce richieste HTTP per appuntamenti")
+    Component(availability_controller, "Availability Controller", "REST Controller", "Gestisce richieste disponibilità")
+    Component(waitlist_controller, "Waitlist Controller", "REST Controller", "Gestisce lista d'attesa")
+    
+    Component(appointment_manager, "Appointment Manager", "Business Logic", "Orchestrazione prenotazioni")
+    Component(availability_checker, "Availability Checker", "Business Logic", "Verifica disponibilità medico e sala")
+    Component(conflict_detector, "Conflict Detector", "Business Logic", "Rileva conflitti di prenotazione")
+    Component(waitlist_manager, "Waitlist Manager", "Business Logic", "Gestisce code d'attesa")
+    Component(cancellation_handler, "Cancellation Handler", "Business Logic", "Gestisce cancellazioni con preavviso")
+    
+    Component(appointment_validator, "Appointment Validator", "Validation", "Valida dati appuntamento")
+    Component(business_rules, "Business Rules Engine", "Rules", "Applica regole di business")
+    
+    Component(appointment_repository, "Appointment Repository", "Data Access", "Accesso dati appuntamenti")
+    Component(availability_repository, "Availability Repository", "Data Access", "Accesso dati disponibilità")
+    Component(waitlist_repository, "Waitlist Repository", "Data Access", "Accesso dati lista attesa")
+    
+    Component(cache_manager, "Cache Manager", "Caching", "Gestisce cache disponibilità")
+    Component(event_publisher, "Event Publisher", "Events", "Pubblica eventi di dominio")
+}
+
+Container(doctor_service, "Doctor Service", "Microservice", "Servizio medici")
+Container(patient_service, "Patient Service", "Microservice", "Servizio pazienti")
+Container(resource_service, "Resource Service", "Microservice", "Servizio risorse")
+
+' API Gateway to Controllers
+Rel(api_gateway, appointment_controller, "Chiamate REST", "JSON/HTTPS")
+Rel(api_gateway, availability_controller, "Chiamate REST", "JSON/HTTPS")
+Rel(api_gateway, waitlist_controller, "Chiamate REST", "JSON/HTTPS")
+
+' Controllers to Managers
+Rel(appointment_controller, appointment_manager, "Usa")
+Rel(availability_controller, availability_checker, "Usa")
+Rel(waitlist_controller, waitlist_manager, "Usa")
+
+' Managers interactions
+Rel(appointment_manager, appointment_validator, "Valida")
+Rel(appointment_manager, availability_checker, "Verifica disponibilità")
+Rel(appointment_manager, conflict_detector, "Verifica conflitti")
+Rel(appointment_manager, business_rules, "Applica regole")
+Rel(appointment_manager, cancellation_handler, "Gestisce cancellazioni")
+
+Rel(cancellation_handler, waitlist_manager, "Notifica posto libero")
+
+' Managers to Repositories
+Rel(appointment_manager, appointment_repository, "CRUD operazioni")
+Rel(availability_checker, availability_repository, "Legge disponibilità")
+Rel(waitlist_manager, waitlist_repository, "CRUD operazioni")
+
+' Repositories to Database
+Rel(appointment_repository, main_db, "SQL Query", "SQL")
+Rel(availability_repository, main_db, "SQL Query", "SQL")
+Rel(waitlist_repository, main_db, "SQL Query", "SQL")
+
+' Cache interactions
+Rel(availability_checker, cache_manager, "Cache lookup")
+Rel(cache_manager, cache, "Get/Set", "Redis")
+
+' Event publishing
+Rel(appointment_manager, event_publisher, "Pubblica eventi")
+Rel(cancellation_handler, event_publisher, "Pubblica eventi")
+Rel(event_publisher, notification_service, "Eventi notifiche", "Message Queue")
+
+' External service calls
+Rel(availability_checker, doctor_service, "Verifica orari medico", "REST/gRPC")
+Rel(availability_checker, resource_service, "Verifica sala", "REST/gRPC")
+Rel(appointment_manager, patient_service, "Verifica paziente", "REST/gRPC")
+
+@enduml

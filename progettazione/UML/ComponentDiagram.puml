@@ -1,0 +1,128 @@
+@startuml
+skinparam componentStyle rectangle
+
+package "Presentation Layer" {
+  [Patient Web App] as PWA
+  [Doctor Web App] as DWA
+  [Admin Dashboard] as AD
+  [Mobile App] as MA
+}
+
+package "API Gateway Layer" {
+  [API Gateway] as AG
+  [Authentication Service] as AUTH
+  [Rate Limiter] as RL
+}
+
+package "Application Services Layer" {
+  package "Appointment Management" {
+    [Appointment Service] as AS
+    [Availability Service] as AVS
+    [Waiting List Service] as WLS
+  }
+  
+  package "Patient Management" {
+    [Patient Service] as PS
+    [Medical Record Service] as MRS
+  }
+  
+  package "Doctor Management" {
+    [Doctor Service] as DS
+    [Schedule Service] as SS
+  }
+  
+  package "Resource Management" {
+    [Room Service] as RS
+    [Equipment Service] as ES
+  }
+  
+  package "Notification System" {
+    [Notification Service] as NS
+    [Email Service] as EMS
+    [SMS Service] as SMSS
+  }
+}
+
+package "Data Access Layer" {
+  [Repository Layer] as REPO
+}
+
+database "PostgreSQL" {
+  [Appointments DB] as ADB
+  [Patients DB] as PDB
+  [Doctors DB] as DDB
+  [Resources DB] as RDB
+}
+
+package "External Services" {
+  [Email Provider] as EP
+  [SMS Gateway] as SG
+  [Calendar Integration] as CI
+}
+
+' Frontend to API Gateway
+PWA --> AG : HTTPS/REST
+DWA --> AG : HTTPS/REST
+AD --> AG : HTTPS/REST
+MA --> AG : HTTPS/REST
+
+' API Gateway to Auth
+AG --> AUTH : Validate Token
+AG --> RL : Check Limits
+
+' API Gateway to Services
+AG --> AS
+AG --> PS
+AG --> DS
+AG --> RS
+AG --> NS
+
+' Service Dependencies - Appointment
+AS --> AVS : Check Availability
+AS --> WLS : Manage Queue
+AS --> NS : Send Notifications
+AS --> REPO
+
+' Service Dependencies - Patient
+PS --> MRS : Access Records
+PS --> REPO
+
+' Service Dependencies - Doctor
+DS --> SS : Manage Schedule
+DS --> REPO
+
+' Service Dependencies - Resources
+RS --> ES : Check Equipment
+RS --> REPO
+
+' Service Dependencies - Notifications
+NS --> EMS : Email
+NS --> SMSS : SMS
+
+' Repository to Databases
+REPO --> ADB
+REPO --> PDB
+REPO --> DDB
+REPO --> RDB
+
+' External Services
+EMS --> EP
+SMSS --> SG
+AS --> CI : Sync Events
+
+note right of AVS
+  Verifica disponibilità
+  medico e sala in tempo reale
+end note
+
+note right of WLS
+  Gestisce priorità e
+  notifiche automatiche
+end note
+
+note right of NS
+  Gestisce promemoria
+  e conferme appuntamenti
+end note
+
+@enduml
